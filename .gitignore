@@ -1,0 +1,16 @@
+# Python and editor files
+__pycache__/
+*.pyc
+.vscode/
+.DS_Store
+
+# Secrets (none are used in this project, but never commit them)
+.env
+
+# Image data: do not upload the BSDS500 images. Keep only the lists of chosen images.
+data/**/*
+!data/**/
+!data/**/selected_images.txt
+
+# Network files: keep the best network per noise strength, skip the "last" copies
+checkpoints/*_last.pt
