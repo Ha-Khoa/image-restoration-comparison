@@ -23,11 +23,12 @@ def gaussian_kernel(width_in_pixels):
     Normalized 2D Gaussian blur kernel. The width is the standard deviation in pixels.
     """
 
+    # Determine kernel size based on standard deviation 
     radius = int(np.ceil(3 * width_in_pixels))
-    offsets = np.arrange(-radius, radius + 1)
+    offsets = np.arange(-radius, radius + 1)
     one_dimensional = np.exp(-(offsets ** 2) / (2 * width_in_pixels ** 2))
     kernel = np.outer(one_dimensional, one_dimensional)
-    return kernel / kernel.sum()
+    return kernel / kernel.sum()            # Normalize
 
 class BlurOperator:
     """
@@ -49,6 +50,7 @@ class BlurOperator:
             image_height, image_width = image_shape
             if kernel_height > image_height or kernel_width > image_width:
                 raise ValueError("The blur kernel is larger than the image")
+            # Zero padding the smal kernel to match the full dimensions of the image
             padded_kernel = np.zeros(image_shape)
             padded_kernel[:kernel_height, :kernel_width] = self.kernel
 
@@ -56,6 +58,7 @@ class BlurOperator:
             padded_kernel = np.roll(padded_kernel,
                                     shift=(-(kernel_height //2), -(kernel_width//2)),
                                     axis=(0,1))
+            # Convert the padded/shifted kernel into frequency domain
             self._transfer_function_by_shape[image_shape] = np.fft.fft2(padded_kernel)
 
         return self._transfer_function_by_shape[image_shape]
@@ -80,7 +83,7 @@ def degraded_set(images, blur_operator, noise_sigma, seed_offset):
         blurred_image = blur_operator.apply(clean_image)
         degraded_image = add_noise(blurred_image, noise_sigma, SEED + seed_offset + index)
         triples.append((image_name, clean_image, degraded_image))
-        
+
     return triples
 
         
