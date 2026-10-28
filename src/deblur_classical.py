@@ -80,7 +80,7 @@ def make_deblur_methods(blur_operator):
                 wiener_deblur(degraded_image, blur_operator, setting))
              for noise_to_signal_ratio in np.geomspace(1e-4, 1.0, 13)
         ],
-        "Richard-Lucy": [
+        "Richardson-Lucy": [
             (number_of_iterations,
              lambda degraded_image, setting=number_of_iterations:
                 richardson_lucy_deblur(degraded_image, blur_operator, setting))
