@@ -11,18 +11,31 @@ Stand: Das Entfernen von Bildrauschen ist fertig. Ich vergleiche vier klassische
 Wichtig: Das ist meine eigene, vereinfachte Version. Ich benutze andere Bilder und eigene Einstellungen. Meine Zahlen darf man deshalb nicht direkt mit den Tabellen im Paper vergleichen.
 
 ---
+# Project overview
 
-## What I did
+Compare different methods for restoring damaged images
 
-1. Take clean photos and add random noise on purpose, so I know the perfect answer.
-2. Remove the noise with four classical methods and with a neural network.
-3. Measure how close each result is to the clean photo.
+So far, there are two main tasks:
+1. Image denoising: Remove random noise from an image
+2. Image deblurring: Restore an image that has been blurred
 
+For denoising, i compare four classical method with a neural network called DnCNN
+For blurring, i compare two classical methods: wiener filtering and Richardson-Lucy deblurring
+
+The long-term goal is to use DnCNN inside a Plug-and-Play (PnP) method, following the main idea of the paper
+
+## 1. Image denoising
 In the paper, the damaged image is `f = A·u + n` (`u` = clean image, `n` = noise). For plain
 denoising, `A` does nothing, so it is `f = u + n`.
 
-**Noise strength** is called sigma (σ). Image values are between 0 and 1. I use σ = 0.02
-(weak), 0.05 and 0.10 (strong), the same levels as Table 1 in the paper.
+**How it work**
+1. Take clean image and add random noise on purpose, I still have the original image
+2. Remove the noise with four classical methods and with a neural network.
+3. Measure how close each method restores.
+
+**Noise strength** is called sigma (σ). 
+Image values are between 0 and 1.
+I use σ = 0.02(weak), 0.05 and 0.10 (strong), the same levels as Table 1 in the paper.
 
 **Methods**
 
@@ -33,7 +46,7 @@ denoising, `A` does nothing, so it is `f = u + n`.
 - Non-local means: averages pixels whose surroundings look alike, even if they are far apart.
 - DnCNN: a neural network that learns the noise from many examples (details below).
 
-**Measures**
+**Evaluation**
 
 - PSNR (peak signal-to-noise ratio), in decibels (dB): how close the result is to the clean
   image. Higher is better. The paper uses it.
@@ -41,53 +54,14 @@ denoising, `A` does nothing, so it is `f = u + n`.
   identical. The paper does not use it. I added it.
 
 **Choosing the settings.** 
-Each classical method has one setting (for example, the width of
-the Gaussian filter). I try several values on 25 validation images and keep the one with the
-best PSNR. Then I measure on 25 different test images. So I never grade a method on the images
+Each classical method has one setting (for example, the width of the Gaussian filter, non-local means has a parameter called (h)).
+I test several values on 25 validation images and keep the one with the
+best PSNR. Then I evaluated on 25 different test images. So I never grade a method on the images
 used to tune it. This split is my own choice. The paper does not describe it.
 
-## Data
+### Denoising results
 
-- BSDS500 (Berkeley Segmentation Dataset), taken from the GitHub copy `BIDS/BSDS500`. The
-  original is on the website of the Berkeley computer vision group. The images are **not**
-  in this repository.
-  Link to the website: https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/resources.html 
-- 25 validation images and 25 test images, evenly spaced over the sorted file list (no
-  randomness). The lists are in `data/BSDS500_val/selected_images.txt` and
-  `data/BSDS500_test/selected_images.txt`. For training the network I use the 200 `train` images.
-- Images are grayscale with values from 0 to 1, shrunk so the longer side is at most 256 pixels.
-  This makes them a little smoother than the standard images in the paper.
-- Noise is not cut off at 0 and 1. Values are cut only when measuring.
-- Random seeds are fixed. Every method sees the same noisy images. Validation and test images
-  get different noise.
-
-## The network (DnCNN)
-
-- Paper (Section 4.2): 17 layers with 3×3 filters, each followed by a ReLU (a step that sets
-  negative values to zero). Mine has 17 layers, 64 channels and 556,097 learned numbers.
-- The paper does not give every detail, so I followed the original DnCNN paper (Zhang et al.,
-  IEEE Transactions on Image Processing, 2017). I checked these three points against it:
-  the first layer has a ReLU, the middle layers have batch normalization between the
-  convolution and the ReLU (it keeps the values inside the network in a stable range), and the
-  last layer has no ReLU. The network guesses the **noise**; the result is the noisy image
-  minus the guessed noise (called residual learning). Like the original, I pad the images with
-  zeros so the output has the same size as the input.
-- Training: each step uses 128 random 40×40 patches of the training images, with random
-  rotation, flipping and fresh noise. Optimizer: Adam, as in the paper. The learning rate
-  falls from 0.001 to 0.00001. 6000 steps, about 32 minutes per network on a MacBook
-  (Apple M1).
-- The paper says it uses the training method of the original DnCNN, with Adam. I did not copy
-  it exactly. Patch size (40×40) and batch size (128) are the same as in the original DnCNN.
-  The rest differs: the original used 400 training images of 180×180 pixels and trained for
-  50 epochs, which is about 80,000 steps by my reading. I use the 200 BSDS500 training images
-  and only 6000 steps, so my networks are trained much more briefly. The learning rate and its
-  schedule are my own choices.
-- One network per noise strength, as in the paper (Section 4.2). Every 250 steps I measure
-  PSNR on the validation images and keep the best network. Test images are never used for training.
-
-## Results
-
-### Test images (25 images)
+#### Test images (25 images)
 
 PSNR in dB (higher is better):
 
@@ -121,7 +95,7 @@ total variation: weight, non-local means: factor h):
 | Total variation | 0.008 | 0.029 | 0.068 |
 | Non-local means | 0.8 | 0.8 | 0.6 |
 
-### Training of the network (validation images, not test images)
+#### Training of the network (validation images, not test images)
 
 | σ | Noisy images (dB) | DnCNN after 6000 steps (dB) | Gain (dB) |
 |---|---|---|---|
@@ -134,7 +108,114 @@ These numbers are on validation images, so they cannot be compared with the tabl
 The results on the test images (37.79, 32.50 and 29.06 dB) are close to these validation
 results (37.73, 32.39 and 28.91 dB).
 
-## What the results do and do not show
+## 2. Image blurring
+
+**How it works**
+For blurring, I first blur a clean image and then add Gaussian noise:
+`f = Au + n`
+- A: blur operator
+- The goal is to estimate the original image (u) from the damaged image (f)
+
+I use a Gaussian blur kernel with a width of 1.6
+I test two noise levels:
+- σ = 0.01
+- σ = 0.04
+
+These are my own experiments. The noise levels are inspired by Figure 5 of the paper, but the blur kernel and the full experimental setup are my choices
+
+**Methods**
+- Blurred: the damaged/degraded image is used without restoration. This is the baseline
+- Wiener filter: Restores the image in the frequency domain. It tries to reduce blur while controlling noise
+- Richardson-Lucy: Repeatedly updates the image estimate to make it closer to the observed image after blurring
+
+Wiener filtering uses a parameter (K). Richardson-Lucy uses a number of iterations
+
+I test several settings on the validation images and choose the settting with the highest mean PSNR. I evaluate that setting on the test images
+
+The implementation uses circular convolution for blurring. This means that pixels near one edge can be connected to pixels at the opposite edge
+
+### Deblurring results
+
+The following results are the mean values over the 25 test images.
+
+#### PSNR in dB (higher is better):
+
+| Method | Noise ($\sigma = 0.01$) | Noise ($\sigma = 0.04$) |
+| :--- | :---: | :---: |
+| Blurred | 25.85 | 23.78 |
+| Wiener | **27.80** | **24.85** |
+| Richardson–Lucy | 27.73 | 24.10 |
+
+#### SSIM (higher is better):
+
+| Method | Noise ($\sigma = 0.01$) | Noise ($\sigma = 0.04$) |
+| :--- | :---: | :---: |
+| Blurred | 0.726 | 0.496 |
+| Wiener | 0.781 | **0.621** |
+| Richardson–Lucy | **0.783** | 0.520 |
+
+#### Selected settings:
+
+| Method | Noise ($\sigma = 0.01$) | Noise ($\sigma = 0.04$) |
+| :--- | :--- | :--- |
+| Wiener (K) | 0.01 | 0.046416 |
+| Richardson–Lucy (iterations) | 30 | 3 |
+
+**What do these results show?**
+
+Both restoration methods improve the blurred images.
+Wiener filtering give the highest PSNR in both experiment. For noise (σ=0.01), Richardson-Lucy gives a slightly higher SSIM than Wiener filtering.
+This shows that PSNR and SSIM do not always select the same method as the best one
+
+## Data
+
+- BSDS500 (Berkeley Segmentation Dataset), taken from the GitHub copy `BIDS/BSDS500`. The
+  original is on the website of the Berkeley computer vision group. The images are **not**
+  in this repository.
+  Link to the website: https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/resources.html 
+- 25 validation images and 25 test images, evenly spaced over the sorted file list (no
+  randomness). The lists are in `data/BSDS500_val/selected_images.txt` and
+  `data/BSDS500_test/selected_images.txt`. For training the network I use the 200 `train` images.
+- Images are grayscale with values from 0 to 1, shrunk so the longer side is at most 256 pixels.
+  This makes them a little smoother than the standard images in the paper.
+- Noise is not cut off at 0 and 1. Values are cut only when measuring.
+- Random seeds are fixed. Every method sees the same noisy images. Validation and test images
+  get different noise.
+
+## 3.The network (DnCNN)
+
+### Network structure
+
+The network follows the main design described in Section 4.2 of the paper.
+
+- Paper (Section 4.2): 17 layers with 3×3 filters, each followed by a ReLU. Mine has 17 layers, 64 channels and 556,097 learned numbers.
+- The network predicts the noise instead of predictiing the clean image directly
+- The restored image is calculated as:
+$$\text{Restored image} = \text{Noisy image} - \text{Predicted noise} $$
+- The middle layers use batch normalization. The final layer has no ReLU activation
+- Zero padding so that the output has the same size as the input image
+
+### Training
+
+- Train separate network for each noise level: 0.02, 0.05, 0.1
+- Training: each step uses 128 (batch_size) random 40×40 patches of the training images, with random
+  rotation, flipping and fresh noise. 
+- Optimizer: Adam, as in the paper. The learning rate falls from 0.001 to 0.00001. 6000 steps, about 32 minutes per network on a MacBook (Apple M1).
+- The paper says it uses the training method of the original DnCNN, with Adam. I did not copy
+  it exactly. Patch size (40×40) and batch size (128) are the same as in the original DnCNN.
+  The rest differs: the original used 400 training images of 180×180 pixels and trained for
+  50 epochs, which is about 80,000 steps by my reading. I use the 200 BSDS500 training images
+  and only 6000 steps, so my networks are trained much more briefly. The learning rate and its
+  schedule are my own choices.
+- One network per noise strength, as in the paper (Section 4.2). Every 250 steps I measure
+  PSNR on the validation images and keep the best network. Test images are never used for training.
+
+
+# What the results do and do not show
+
+## Denoising
+
+DnCNN gives the highes PSNR and SSIM at all three noise levels in my experiments.
 
 - **First check:** my "noisy image" numbers (34.03 / 26.14 / 20.26) are close to the "Noisy"
   column in Table 1 of the paper (33.99 / 26.06 / 20.14). So my noise and PSNR look right.
@@ -158,7 +239,12 @@ results (37.73, 32.39 and 28.91 dB).
 - Some chosen settings lie at the edge of the values I tried (median window 3, non-local means
   h = 0.6 at σ = 0.10), so the best value could be outside my range.
 - Non-local means is told the true noise strength. That is a small advantage.
-- BM3D, a strong classical method that the paper compares with, is not included.
+
+## Deblurring
+
+- Both Wiener filtering and Richardson-Lucy improve the PSNR and SSIM compared with blurred images.
+- Wiener filtering has the highest PSNR in both experiments. Richardson-Lucy has a slightly higher SSIM in the low-noise experiment
+- Only 25 test images are used. The results are useful for comparing these implementations, but they are not enough to prove that one method is always better
 
 ## What went wrong first
 
@@ -176,15 +262,18 @@ I did not test other explanations, so this is a guess, not a proven fact.
     # Choose the 25 validation and 25 test images from BSDS500
     python -m src.make_subsets --source <path>/BSDS500/data/images --count 25
 
-    # Classical methods
+    # Classical denoising methods
     python -m src.run_day1 --val data/BSDS500_val --test data/BSDS500_test --max_side 256
 
-    # Train the network for one noise strength (repeat for 0.05 and 0.10)
+    # Train the network (DnCNN) for one noise strength (repeat for 0.05 and 0.10)
     python -m src.train --train_folder <path>/BSDS500/data/images/train \
         --val_folder data/BSDS500_val --sigma 0.02 --number_of_layers 17 --number_of_steps 6000
 
-    # Measure the networks on the test images and add them to the table
+    # Evaluate DnCNN on the test images and add them to the table
     python -m src.run_day3 --test data/BSDS500_test --max_side 256
+
+    # Run the deblurring experiments
+    python -m src.run_day4 --val data/BSDS500_val --test data/BSDS500_test --max_side 256
 
 Results are saved in `results/`. Trained networks are in `checkpoints/`.
 
@@ -198,10 +287,17 @@ Results are saved in `results/`. Trained networks are in `checkpoints/`.
 - `src/run_day1.py`: experiment for the classical methods
 - `src/run_day3.py`: measures the network on the test images
 - `src/make_subsets.py`: chooses the validation and test images
+- `src/blur.py`: Creates Gaussian blur kernels and applies the blur operator
+- `src/deblur_classical.py`: Implements Wiener and Richard-Lucy deblurring
+- `src/run_day4.py`: Runs the deblurring experiments and saved the results and example figure
 
 ## What comes next
 
+The next step is to use the trained DnCNN as a denoiser inside a Plug-and-Play method for image deblurring.
 
+The goal is to compare this approach with the classical methods from Day 4.
+
+This part is planned work. The current deblurring results do not yet include the Plug-and-Play method.
 
 ## References
 
