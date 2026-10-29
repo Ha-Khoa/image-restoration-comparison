@@ -6,7 +6,7 @@ Dieses Projekt ist eine kleine Lernübung. Ich lese das Paper *Learning Proximal
 
 Das Paper zeigt, wie man ein neuronales Netz, das Bildrauschen entfernt, in ein Verfahren einbauen kann, das verschwommene Bilder wieder schärft.
 
-Stand: Das Entfernen von Bildrauschen ist fertig. Ich vergleiche vier klassische Verfahren mit einem neuronalen Netz (DnCNN). Noch offen: das Schärfen verschwommener Bilder und die Komnination mit dem Verfahren aus dem Paper.
+Stand: Das Entfernen von Bildrauschen ist fertig. Ich vergleiche vier klassische Verfahren mit einem neuronalen Netz (DnCNN). Ich habe klassiche Verfahren zur Entschärfung verschwommener Bilder implementiert und getestet. Als Nächstes möchte ich das DnCNN als sogenannten Plug-and-Play-Proximaloperator verwenden und mit den klassischen Verfahren vergleichen
 
 Wichtig: Das ist meine eigene, vereinfachte Version. Ich benutze andere Bilder und eigene Einstellungen. Meine Zahlen darf man deshalb nicht direkt mit den Tabellen im Paper vergleichen.
 
