@@ -167,6 +167,65 @@ Both restoration methods improve the blurred images.
 Wiener filtering give the highest PSNR in both experiment. For noise (σ=0.01), Richardson-Lucy gives a slightly higher SSIM than Wiener filtering.
 This shows that PSNR and SSIM do not always select the same method as the best one
 
+
+## 3. Plug-and-Play deblurring
+
+### Idea
+
+Plug-and-Play (PnP) methods insert a denoiser into an iterative optimization algorithm insted of using conventional proximal operator. In this project, I use PnP-ADMM for deblurring and compare two denoisers:
+  - PnP-TV: a total-variation denoiser
+  - PnP-DnCNN-0.02: The DnCNN model trained for Gaussian noise with $\sigma=0.02$
+The data fidelity term uses the blur operator and the observed degraded image. The denoiser provides an image prior. The algorithm alternates between a denoising step and a data-consistency update
+
+The denoiser's training noise level does not have to equal the additional noise level in the deblurring experiment. However, this means the denoiser is being used in setting that differs from its original denoising task
+
+### PnP results
+
+The following are mean result over the 25 test images. The PnP parameter $\alpha$ was selected on the validation set by choosing the tested value with the highest mean PSNR
+
+#### Mean PSNR (dB, higher is better)
+| Method | Noise σ = 0.01 | Noise σ = 0.04 |
+|---|---:|---:|
+| Blurred | 25.85 dB | 23.78 dB |
+| Wiener | 27.80 dB | 24.85 dB |
+| Richardson–Lucy | 27.73 dB | 24.10 dB |
+| PnP-TV | 28.73 dB | 26.93 dB |
+| **PnP-DnCNN-0.02** | **29.28 dB** | **27.14 dB** |
+
+#### Mean SSIM (higher is better)
+| Method | Noise σ = 0.01 | Noise σ = 0.04 |
+|---|---:|---:|
+| Blurred | 0.726 | 0.496 |
+| Wiener | 0.781 | 0.621 |
+| Richardson–Lucy | 0.783 | 0.520 |
+| PnP-TV | 0.833 | 0.743 |
+| **PnP-DnCNN-0.02** | **0.849** | **0.757** |
+
+Selected parameters:
+
+#### Selected parameters ( $\alpha$ )
+
+| Method | Noise \(\sigma = 0.01\) | Noise \(\sigma = 0.04\) |
+|---|---:|---:|
+| PnP-TV | 88.914 | 6.6676 |
+| **PnP-DnCNN-0.02** | **15.8114** | **1.1857** |
+
+
+### What do these results show?
+
+-   Both PnP methods outperform the classical deblurring methods in mean
+    PSNR and SSIM on this test subset.
+-   PnP-DnCNN has the highest mean PSNR and SSIM for both noise levels
+    in these experiments.
+-   At (`\sigma=0.01`{=tex}), PnP-DnCNN reaches 29.28 dB and 0.849 SSIM,
+    compared with 28.73 dB and 0.833 for PnP-TV.
+-   At (`\sigma=0.04`{=tex}), PnP-DnCNN reaches 27.14 dB and 0.757 SSIM,
+    compared with 26.93 dB and 0.743 for PnP-TV.
+-   The improvements are measured on 25 test images, so they are
+    evidence for this implementation and subset, not proof that one
+    method is always better.
+
+
 ## Data
 
 - BSDS500 (Berkeley Segmentation Dataset), taken from the GitHub copy `BIDS/BSDS500`. The
@@ -194,6 +253,7 @@ The network follows the main design described in Section 4.2 of the paper.
 $$\text{Restored image} = \text{Noisy image} - \text{Predicted noise} $$
 - The middle layers use batch normalization. The final layer has no ReLU activation
 - Zero padding so that the output has the same size as the input image
+
 
 ### Training
 
@@ -246,6 +306,21 @@ DnCNN gives the highes PSNR and SSIM at all three noise levels in my experiments
 - Wiener filtering has the highest PSNR in both experiments. Richardson-Lucy has a slightly higher SSIM in the low-noise experiment
 - Only 25 test images are used. The results are useful for comparing these implementations, but they are not enough to prove that one method is always better
 
+## PnP
+- DnCNN performs best among the tested denoisers for the denoising
+experiments.
+- PnP-TV and PnP-DnCNN improve deblurring quality compared with the
+classical methods in the current experiments.
+- PnP-DnCNN gives the highest mean PSNR and SSIM in the two tested
+deblurring settings.
+- The convergence plot is for one test image, while the reported
+result tables summarize 25 test images.
+- The experiments do not prove that the methods always rank in this
+order, nor do the PSNR curves prove mathematical convergence.
+- Results depend on the selected images, noise levels, blur operator,
+parameter search range, and the trained checkpoints.
+- These experiments are a simplified implementation inspired by the
+paper, not an exact reproduction.
 ## What went wrong first
 
 My first training run (σ = 0.02) used a random start for the last layer. After about 2900
@@ -272,24 +347,39 @@ I did not test other explanations, so this is a guess, not a proven fact.
     # Evaluate DnCNN on the test images and add them to the table
     python -m src.run_day3 --test data/BSDS500_test --max_side 256
 
-    # Run the deblurring experiments
+    # Run the classical deblurring experiments
     python -m src.run_day4 --val data/BSDS500_val --test data/BSDS500_test --max_side 256
 
-Results are saved in `results/`. Trained networks are in `checkpoints/`.
+    # Run Plug-and-Play deblurring (requires the trained DnCNN checkpoint files in `checkpoints/`)
+    python -m src.run_day5 --val data/BSDS500_val --test data/BSDS500_test --max_side 256
+
+    # On macOS caffeinate -i can be placed before the Python command to prevent the computer from entering idle sleep while the experiment runs:
+    caffeinate -i python -m src.run_day5 --val data/BSDS500_val --test data/BSDS500_test --max_side 256
+
+
+Results are saved in `results/`, including:
+  - `day4_deblur.csv` : classical deblurring results
+  - `day5_deblur_with_pnp.csv`: combined classical and PnP results
+  - `day5_example.png`: restoration examples
+  - `day5_convergence.png`: PSNR over ADMM iterations
+Trained networks are in `checkpoints/`.
 
 ## Files
 
-- `src/data.py`: loads images and adds noise
-- `src/metrics.py`: PSNR and SSIM
-- `src/classical.py`: the four classical methods
-- `src/model.py`: the DnCNN network
-- `src/train.py`: trains the network
-- `src/run_day1.py`: experiment for the classical methods
-- `src/run_day3.py`: measures the network on the test images
-- `src/make_subsets.py`: chooses the validation and test images
-- `src/blur.py`: Creates Gaussian blur kernels and applies the blur operator
-- `src/deblur_classical.py`: Implements Wiener and Richard-Lucy deblurring
-- `src/run_day4.py`: Runs the deblurring experiments and saved the results and example figure
+- `src/data.py`: loads images and adds noise.
+- `src/metrics.py`: PSNR and SSIM.
+- `src/classical.py`: the four classical methods.
+- `src/model.py`: the DnCNN network.
+- `src/train.py`: trains the network.
+- `src/run_day1.py`: experiment for the classical methods.
+- `src/run_day3.py`: measures the network on the test images.
+- `src/make_subsets.py`: chooses the validation and test images.
+- `src/blur.py`: Creates Gaussian blur kernels and applies the blur operator.
+- `src/deblur_classical.py`: Implements Wiener and Richard-Lucy deblurring.
+- `src/run_day4.py`: Runs the deblurring experiments and saved the results and example figure.
+- `src/denoisers.py`: Runs classical deblurring experiments.
+- `src/pnp.py`: Implements PnP proximal-gradient and PnP-ADMM updates.
+- `src/run_day5.py`: Run PnP deblurring, selects parameters on validation data, evaluates test results and save tables/figures.
 
 ## What comes next
 
