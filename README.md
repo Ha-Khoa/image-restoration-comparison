@@ -6,7 +6,7 @@ Dieses Projekt ist eine kleine Lernübung. Ich lese das Paper *Learning Proximal
 
 Das Paper zeigt, wie man ein neuronales Netz, das Bildrauschen entfernt, in ein Verfahren einbauen kann, das verschwommene Bilder wieder schärft.
 
-Stand: Das Entfernen von Bildrauschen ist fertig. Ich vergleiche vier klassische Verfahren mit einem neuronalen Netz (DnCNN). Ich habe klassiche Verfahren zur Entschärfung verschwommener Bilder implementiert und getestet. Als Nächstes möchte ich das DnCNN als sogenannten Plug-and-Play-Proximaloperator verwenden und mit den klassischen Verfahren vergleichen
+Stand: Ich habe Experimente zur Bildentrauschung und Bildentschärfung durchgeführt. Dabei vergleiche ich klassische Verfahren mit einem neuronalen Netz (DnCNN). Anschließend habe ich DnCNN als sogenannten Plug-and-Play-Proximaloperator (PnP) verwendet. In weiteren Experimenten untersuche ich den Einfluss des Trainingsrauschens des Netzwerks auf den optimalen Parameter alpha.
 
 Wichtig: Das ist meine eigene, vereinfachte Version. Ich benutze andere Bilder und eigene Einstellungen. Meine Zahlen darf man deshalb nicht direkt mit den Tabellen im Paper vergleichen.
 
@@ -225,6 +225,117 @@ Selected parameters:
     evidence for this implementation and subset, not proof that one
     method is always better.
 
+## 4. Alpha-Sigma Study
+
+### Idea
+
+In Day 5, I used one DnCNN model trained for Gaussian noise with sigma=0.02.
+
+In Day 6, I investigate how the training noise level of DnCNN affects the best alpha in PnP-ADMM.
+
+I use three separately trained DnCNN models:
+- DnCNN-0.02
+- DnCNN-0.05
+- DnCNN-0.10
+For each model, I search for the best alpha on the validation images. Then I evaluate the selected alpha on the test images.
+The main questions is whether the best alpha follows the relationship:
+$$
+\alpha = p\sigma^2
+$$
+where the sigma is the noise level used to train DnCNN and p is a constant for each deblurring experiment.
+The paper discusses this quadratic relationship. I check whether my experimental results show a similar trend.
+
+### Experiments
+I use the same two deblurring settings as in Day 4 and Day 5:
+- Gaussian blur width: 1.6
+- Additional noise sigma = 0.01
+- Additional noise sigma = 0.04
+
+For each setting, I perform two experiments.
+
+**1. Fixed network**
+
+I use one DnCNN model throughout all ADMM iterations.
+
+I test three models with different training noise levels (0.02, 0.05 and 0.10). For each model, I search for the alpha with the highest mean PSNR on 10 validation images.
+
+The selected alpha is then evaluated on 25 test images.
+
+**2. Decreasing sigma**
+
+Instead of using one fixed network, I change the DnCNN model during the ADMM iterations:
+
+- First: DnCNN-0.10
+- Then: DnCNN-0.05
+- Finally: DnCNN-0.02
+
+This experiment tests whether gradually decreasing the training noise level improves the restoration result.
+
+### Results
+
+The following results are mean values over the 25 test images.
+
+#### Mean PSNR (dB, higher is better)
+
+| Method | Noise sigma = 0.01 | Noise sigma = 0.04 |
+|---|---:|---:|
+| Fixed DnCNN-0.02 | 29.31 | 27.08 |
+| Fixed DnCNN-0.05 | **29.42** | 27.32 |
+| Fixed DnCNN-0.10 | 29.40 | **27.38** |
+| Decreasing sigma (0.10 > 0.05 > 0.02) | 29.39 | 27.25 |
+
+#### Mean SSIM (higher is better)
+
+| Method | Noise sigma = 0.01 | Noise sigma = 0.04 |
+|---|---:|---:|
+| Fixed DnCNN-0.02 | 0.850 | 0.753 |
+| Fixed DnCNN-0.05 | **0.850** | **0.766** |
+| Fixed DnCNN-0.10 | 0.847 | 0.763 |
+| Decreasing sigma (0.10 > 0.05 > 0.02) | 0.850 | 0.764 |
+
+#### Selected alpha values
+
+The alpha values are selected using the validation images.
+
+| Network | Alpha, noise sigma = 0.01 | Alpha, noise sigma = 0.04 |
+|---|---:|---:|
+| DnCNN-0.02 | 23.208 | 1.077 |
+| DnCNN-0.05 | 50.000 | 5.000 |
+| DnCNN-0.10 | 107.722 | 10.772 |
+| Decreasing sigma | 23.208 | 2.320 |
+
+#### Interpolated alpha values
+
+I also estimate alpha between the tested grid values using interpolation of the validation PSNR curves.
+
+| Network | Alpha, noise sigma = 0.01 | Alpha, noise sigma = 0.04 |
+|---|---:|---:|
+| DnCNN-0.02 | 17.1 | 1.54 |
+| DnCNN-0.05 | 47.3 | 4.05 |
+| DnCNN-0.10 | 102 | 9.45 |
+
+#### Checking the relationship alpha = p * sigma^2
+
+I fit the relationship between alpha and the network training noise level in logarithmic space.
+
+| Experiment | Estimated p | Slope |
+|---|---:|---:|
+| Noise sigma = 0.04 | 1.81 × 10³ | 1.12 |
+| Noise sigma = 0.01 | 2.02 × 10⁴ | 1.11 |
+
+The expected slope for the quadratic relationship is 2.
+
+### What do these results show?
+
+- DnCNN-0.05 gives the highest PSNR for the low-noise experiment (29.42 dB).
+- DnCNN-0.10 gives the highest PSNR for the higher-noise experiment (27.38 dB).
+- The differences between the three fixed networks are relatively small.
+- The decreasing-sigma experiment does not outperform the best fixed network in either experiment.
+- The fitted slopes (1.11 and 1.12) are below the expected value of 2. Therefore, my experiments do not confirm the quadratic relationship alpha = p * sigma^2.
+- Only three network noise levels are tested, so the fitted slopes are based on a small number of measurements.
+- Alpha is selected on only 10 validation images, while the final results are measured on 25 separate test images.
+- These results apply to my implementation and experimental settings. They do not prove that the same relationship or ranking holds for other images or blur settings.
+
 
 ## Data
 
@@ -241,7 +352,7 @@ Selected parameters:
 - Random seeds are fixed. Every method sees the same noisy images. Validation and test images
   get different noise.
 
-## 3.The network (DnCNN)
+## The network (DnCNN)
 
 ### Network structure
 
@@ -271,9 +382,9 @@ $$\text{Restored image} = \text{Noisy image} - \text{Predicted noise} $$
   PSNR on the validation images and keep the best network. Test images are never used for training.
 
 
-# What the results do and do not show
+## What the results do and do not show
 
-## Denoising
+### Denoising
 
 DnCNN gives the highes PSNR and SSIM at all three noise levels in my experiments.
 
@@ -300,13 +411,13 @@ DnCNN gives the highes PSNR and SSIM at all three noise levels in my experiments
   h = 0.6 at σ = 0.10), so the best value could be outside my range.
 - Non-local means is told the true noise strength. That is a small advantage.
 
-## Deblurring
+### Deblurring
 
 - Both Wiener filtering and Richardson-Lucy improve the PSNR and SSIM compared with blurred images.
 - Wiener filtering has the highest PSNR in both experiments. Richardson-Lucy has a slightly higher SSIM in the low-noise experiment
 - Only 25 test images are used. The results are useful for comparing these implementations, but they are not enough to prove that one method is always better
 
-## PnP
+### PnP
 - DnCNN performs best among the tested denoisers for the denoising
 experiments.
 - PnP-TV and PnP-DnCNN improve deblurring quality compared with the
@@ -321,6 +432,19 @@ order, nor do the PSNR curves prove mathematical convergence.
 parameter search range, and the trained checkpoints.
 - These experiments are a simplified implementation inspired by the
 paper, not an exact reproduction.
+
+### Alpha-Sigma Study
+
+- The best fixed DnCNN model depends on the additional noise level.
+- DnCNN-0.05 performs best at noise sigma = 0.01, while DnCNN-0.10 performs best at noise sigma = 0.04.
+- The differences between the fixed networks are small.
+- Decreasing sigma during ADMM does not improve the result over the best fixed network in these experiments.
+- The fitted log-log slopes are approximately 1.11 and 1.12, instead of the expected value of 2 for alpha = p * sigma^2.
+- Only three training noise levels are tested. More experiments would be needed to investigate this relationship reliably.
+- Alpha is selected using 10 validation images and evaluated on 25 separate test images.
+- The results do not prove mathematical convergence of the changing-denoiser ADMM algorithm.
+- The experiments are simplified implementations inspired by the paper, not exact reproductions.
+
 ## What went wrong first
 
 My first training run (σ = 0.02) used a random start for the last layer. After about 2900
@@ -331,7 +455,8 @@ that the random start made the network spend a long time just to get down to "do
 I did not test other explanations, so this is a guess, not a proven fact.
 
 ## How to run
-
+  
+    # Activate the Python environment first.
     python -m pip install -r requirements.txt
 
     # Choose the 25 validation and 25 test images from BSDS500
@@ -353,15 +478,23 @@ I did not test other explanations, so this is a guess, not a proven fact.
     # Run Plug-and-Play deblurring (requires the trained DnCNN checkpoint files in `checkpoints/`)
     python -m src.run_day5 --val data/BSDS500_val --test data/BSDS500_test --max_side 256
 
+    # Run Alpha-Sigma study
+    python -m src.run_day6 --val data/BSDS500_val --test data/BSDS500_test --max_side 256
+
     # On macOS caffeinate -i can be placed before the Python command to prevent the computer from entering idle sleep while the experiment runs:
     caffeinate -i python -m src.run_day5 --val data/BSDS500_val --test data/BSDS500_test --max_side 256
 
 
 Results are saved in `results/`, including:
-  - `day4_deblur.csv` : classical deblurring results
-  - `day5_deblur_with_pnp.csv`: combined classical and PnP results
-  - `day5_example.png`: restoration examples
+  - `day1_denoise.csv`: Classical denoising results
+  - `day3_denoise_with_dncnn.csv`: Denoising results including DnCNN
+  - `day4_deblur.csv` : Classical deblurring results
+  - `day5_deblur_with_pnp.csv`: Combined classical and PnP results
+  - `day5_example.png`: Restoration examples
   - `day5_convergence.png`: PSNR over ADMM iterations
+  - `day6_alpha_sigma.csv`: Alpha-sigma study results
+  - `day6_alpha_curves.csv`: Validation PSNR as a function of alpha
+  - `day6_alpha_vs_sigma.png`: Relationship between alpha, network noise level and test PSNR
 Trained networks are in `checkpoints/`.
 
 ## Files
@@ -380,14 +513,10 @@ Trained networks are in `checkpoints/`.
 - `src/denoisers.py`: Runs classical deblurring experiments.
 - `src/pnp.py`: Implements PnP proximal-gradient and PnP-ADMM updates.
 - `src/run_day5.py`: Run PnP deblurring, selects parameters on validation data, evaluates test results and save tables/figures.
+- `src/run_day6.py`: Runs the alpha-sigma study with fixed DnCNN models and a decreasing-sigma schedule
 
 ## What comes next
 
-The next step is to use the trained DnCNN as a denoiser inside a Plug-and-Play method for image deblurring.
-
-The goal is to compare this approach with the classical methods from Day 4.
-
-This part is planned work. The current deblurring results do not yet include the Plug-and-Play method.
 
 ## References
 
