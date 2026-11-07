@@ -1,28 +1,62 @@
 # image-restoration-comparison
 
-## Einführung
+## Introduction
 
-Dieses Projekt ist eine kleine Lernübung. Ich lese das Paper *Learning Proximal Operators* (Meinhardt, Moeller, Hazirbas, Cremers, ICCV, 2017) und baue einen Teil davon selbst nach.
+Restoring damaged images with classical methods and with a neural network (DnCNN), including a plug-and-play deblurring method. The project is inspired by the paper *Learning Proximal Operators: Using Denoising Networks for Regularizing Inverse Imaging Problems* (Meinhardt, Moeller, Hazirbas, Cremers, ICCV, 2017).
 
-Das Paper zeigt, wie man ein neuronales Netz, das Bildrauschen entfernt, in ein Verfahren einbauen kann, das verschwommene Bilder wieder schärft.
+This is a learning project and a simplified implementation of the paper, so i can improve my skill, not an exact reproduction. I use different images and my own settings, so the results should not be directly compared with the results in the original paper
 
-Stand: Ich habe Experimente zur Bildentrauschung und Bildentschärfung durchgeführt. Dabei vergleiche ich klassische Verfahren mit einem neuronalen Netz (DnCNN). Anschließend habe ich DnCNN als sogenannten Plug-and-Play-Proximaloperator (PnP) verwendet. In weiteren Experimenten untersuche ich den Einfluss des Trainingsrauschens des Netzwerks auf den optimalen Parameter alpha.
+The main idea is to use a neural network trained to remove noise as part of an iterative method for restoring blurred images. I explore this idea in four steps:
+1. Denoising: Compare four classical methods with DnCNN.
+2. Deblurring: Compare two classical deblurring methods
+3. Plug-and-play deblurring: Use a denoising method inside an iterative deblurring algorithm
+4. Alpha and noise study: Investigating how the best data-term weight depends on the noise level used to train the network
 
-Wichtig: Das ist meine eigene, vereinfachte Version. Ich benutze andere Bilder und eigene Einstellungen. Meine Zahlen darf man deshalb nicht direkt mit den Tabellen im Paper vergleichen.
 
 ---
 # Project overview
 
-Compare different methods for restoring damaged images
+## Main results (25 test images)
+- **Denoising**: DnCNN is the best method at all three noise level:
+    PSNR: 37.79 / 32.50 / 29.06 dB
+    It is 1.15 / 1.42 / 1.21 dB above non-local means, the best classical method
 
-So far, there are two main tasks:
-1. Image denoising: Remove random noise from an image
-2. Image deblurring: Restore an image that has been blurred
+- **Deblurring, classical**: Wiener filter and Richardson-Lucy improve the blurred images by 1 to 2 dB.
+    The Wiener filter is better when the noise is strong
+- **Deblurring, plug-and-play**: Plugging in a denoiser helps. PnP with total variation reaches 28.73 / 26.93 dB and PnP with DnCNN (trained for σ = 0.02) reaches 29.28 / 27.14 dB
+- **Data weight α**: The best α grows with the noise level of the network, but only about in proportion to σ, not with σ² as the paper suggest
+- **Limits**: 25 test images, one training run per network, 30 iterations for plug-and-play (DnCNN has not fully converged by then). Differences below about 0.1 dB should not be trusted. See "Limits" below
 
-For denoising, i compare four classical method with a neural network called DnCNN
-For blurring, i compare two classical methods: wiener filtering and Richardson-Lucy deblurring
+## Set up
 
-The long-term goal is to use DnCNN inside a Plug-and-Play (PnP) method, following the main idea of the paper
+### Data
+
+- BSDS500 (Berkeley Segmentation Dataset), taken from the GitHub copy `BIDS/BSDS500`. The
+  original is on the website of the Berkeley computer vision group. The images are **not**
+  in this repository.
+  Link to the website: https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/resources.html 
+- 25 validation images and 25 test images, evenly spaced over the sorted file list (no
+  randomness). The lists are in `data/BSDS500_val/selected_images.txt` and
+  `data/BSDS500_test/selected_images.txt`. For training the network I use the 200 `train` images.
+- Images are grayscale with values from 0 to 1, shrunk so the longer side is at most 256 pixels.
+  This makes them a little smoother than the standard images in the paper.
+- Noise is not cut off at 0 and 1. Values are cut only when measuring.
+- Random seeds are fixed. Every method sees the same noisy images. Validation and test images
+  get different noise.
+
+### The damage model
+
+In the paper, the damaged image is f = A·u + n, where u is the clean image, A an operator and n noise. For denoising, A does nothing, so f = u + n. For deblurring, A is a blur. The goal is to estimate u from f.
+
+The strength of the noise is called sigma (σ). I use σ = 0.02 (weak), 0.05 and 0.10 (strong) for denoising, the same levels as Table 1 in the paper.
+
+### How I measure
+- **PSNR** (peak signal-to-noise ratio), in decibels (dB): how close the result is to the clean image. Higher is better. The paper uses it.
+- **SSIM** (structural similarity), from 0 to 1: compares the structure of two images. 1 means identical. The paper does not use it. I added it.
+
+### How I choose the settings
+
+Each method has settings (for example, the width of the Gaussian filter). I try several values on the validation images and keep the one with the best mean PSNR. Then I measure on the 25 test images. So no method is graded on the images used to tune it. This split is my own choice. The paper does not describe it.
 
 ## 1. Image denoising
 In the paper, the damaged image is `f = A·u + n` (`u` = clean image, `n` = noise). For plain
@@ -46,12 +80,6 @@ I use σ = 0.02(weak), 0.05 and 0.10 (strong), the same levels as Table 1 in the
 - Non-local means: averages pixels whose surroundings look alike, even if they are far apart.
 - DnCNN: a neural network that learns the noise from many examples (details below).
 
-**Evaluation**
-
-- PSNR (peak signal-to-noise ratio), in decibels (dB): how close the result is to the clean
-  image. Higher is better. The paper uses it.
-- SSIM (structural similarity), from 0 to 1: compares the structure of two images. 1 means
-  identical. The paper does not use it. I added it.
 
 **Choosing the settings.** 
 Each classical method has one setting (for example, the width of the Gaussian filter, non-local means has a parameter called (h)).
@@ -72,7 +100,7 @@ PSNR in dB (higher is better):
 | Median filter | 29.83 | 28.19 | 25.34 |
 | Total variation | 36.47 | 31.02 | 27.74 |
 | Non-local means | 36.64 | 31.07 | 27.85 |
-| DnCNN | 37.79 | 32.50 | 29.06 |
+| DnCNN | **37.79** | **32.50** | **29.06** |
 
 SSIM (closer to 1 is better):
 
@@ -83,7 +111,7 @@ SSIM (closer to 1 is better):
 | Median filter | 0.857 | 0.766 | 0.599 |
 | Total variation | 0.949 | 0.859 | 0.750 |
 | Non-local means | 0.957 | 0.859 | 0.749 |
-| DnCNN | 0.968 | 0.905 | 0.813 |
+| DnCNN | **0.968** | **0.905** | **0.813** |
 
 Chosen settings of the classical methods (Gaussian: width in pixels, median: window size,
 total variation: weight, non-local means: factor h):
@@ -140,7 +168,7 @@ The following results are the mean values over the 25 test images.
 
 #### PSNR in dB (higher is better):
 
-| Method | Noise ($\sigma = 0.01$) | Noise ($\sigma = 0.04$) |
+| Method | Noise ($$ \sigma = 0.01 $$) | Noise ($\sigma = 0.04$) |
 | :--- | :---: | :---: |
 | Blurred | 25.85 | 23.78 |
 | Wiener | **27.80** | **24.85** |
@@ -174,14 +202,14 @@ This shows that PSNR and SSIM do not always select the same method as the best o
 
 Plug-and-Play (PnP) methods insert a denoiser into an iterative optimization algorithm insted of using conventional proximal operator. In this project, I use PnP-ADMM for deblurring and compare two denoisers:
   - PnP-TV: a total-variation denoiser
-  - PnP-DnCNN-0.02: The DnCNN model trained for Gaussian noise with $\sigma=0.02$
+  - PnP-DnCNN-0.02: The DnCNN model trained for Gaussian noise with σ=0.02
 The data fidelity term uses the blur operator and the observed degraded image. The denoiser provides an image prior. The algorithm alternates between a denoising step and a data-consistency update
 
 The denoiser's training noise level does not have to equal the additional noise level in the deblurring experiment. However, this means the denoiser is being used in setting that differs from its original denoising task
 
 ### PnP results
 
-The following are mean result over the 25 test images. The PnP parameter $\alpha$ was selected on the validation set by choosing the tested value with the highest mean PSNR
+The following are mean result over the 25 test images. The PnP parameter σ was selected on the validation set by choosing the tested value with the highest mean PSNR
 
 #### Mean PSNR (dB, higher is better)
 | Method | Noise σ = 0.01 | Noise σ = 0.04 |
@@ -203,7 +231,7 @@ The following are mean result over the 25 test images. The PnP parameter $\alpha
 
 Selected parameters:
 
-#### Selected parameters ( $\alpha$ )
+#### Selected parameters (σ)
 
 | Method | Noise \(\sigma = 0.01\) | Noise \(\sigma = 0.04\) |
 |---|---:|---:|
@@ -217,9 +245,9 @@ Selected parameters:
     PSNR and SSIM on this test subset.
 -   PnP-DnCNN has the highest mean PSNR and SSIM for both noise levels
     in these experiments.
--   At (`\sigma=0.01`{=tex}), PnP-DnCNN reaches 29.28 dB and 0.849 SSIM,
+-   At ($$`\sigma=0.01`{=tex}$$), PnP-DnCNN reaches 29.28 dB and 0.849 SSIM,
     compared with 28.73 dB and 0.833 for PnP-TV.
--   At (`\sigma=0.04`{=tex}), PnP-DnCNN reaches 27.14 dB and 0.757 SSIM,
+-   At ($$`\sigma=0.04`{=tex}$$), PnP-DnCNN reaches 27.14 dB and 0.757 SSIM,
     compared with 26.93 dB and 0.743 for PnP-TV.
 -   The improvements are measured on 25 test images, so they are
     evidence for this implementation and subset, not proof that one
@@ -237,11 +265,10 @@ I use three separately trained DnCNN models:
 - DnCNN-0.02
 - DnCNN-0.05
 - DnCNN-0.10
-For each model, I search for the best alpha on the validation images. Then I evaluate the selected alpha on the test images.
-The main questions is whether the best alpha follows the relationship:
-$$
-\alpha = p\sigma^2
-$$
+For each model, I search for the best alpha on the validation images. Then I evaluate the selected alpha on the test images. The main questions is whether the best alpha follows the relationship:
+
+**α = σ²**
+
 where the sigma is the noise level used to train DnCNN and p is a constant for each deblurring experiment.
 The paper discusses this quadratic relationship. I check whether my experimental results show a similar trend.
 
@@ -253,7 +280,7 @@ I use the same two deblurring settings as in Day 4 and Day 5:
 
 For each setting, I perform two experiments.
 
-**1. Fixed network**
+**1.Fixed network**
 
 I use one DnCNN model throughout all ADMM iterations.
 
@@ -261,7 +288,7 @@ I test three models with different training noise levels (0.02, 0.05 and 0.10). 
 
 The selected alpha is then evaluated on 25 test images.
 
-**2. Decreasing sigma**
+**2.Decreasing sigma**
 
 Instead of using one fixed network, I change the DnCNN model during the ADMM iterations:
 
@@ -337,20 +364,7 @@ The expected slope for the quadratic relationship is 2.
 - These results apply to my implementation and experimental settings. They do not prove that the same relationship or ranking holds for other images or blur settings.
 
 
-## Data
 
-- BSDS500 (Berkeley Segmentation Dataset), taken from the GitHub copy `BIDS/BSDS500`. The
-  original is on the website of the Berkeley computer vision group. The images are **not**
-  in this repository.
-  Link to the website: https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/resources.html 
-- 25 validation images and 25 test images, evenly spaced over the sorted file list (no
-  randomness). The lists are in `data/BSDS500_val/selected_images.txt` and
-  `data/BSDS500_test/selected_images.txt`. For training the network I use the 200 `train` images.
-- Images are grayscale with values from 0 to 1, shrunk so the longer side is at most 256 pixels.
-  This makes them a little smoother than the standard images in the paper.
-- Noise is not cut off at 0 and 1. Values are cut only when measuring.
-- Random seeds are fixed. Every method sees the same noisy images. Validation and test images
-  get different noise.
 
 ## The network (DnCNN)
 
